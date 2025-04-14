@@ -1,24 +1,23 @@
 cmake_minimum_required(VERSION 3.10)
+project(eddie_pmu_control)
 
-# Set the project name
-project(FreddyControl)
+find_package(soem)
 
-# Set the C standard
-set(CMAKE_C_STANDARD 99)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wpedantic -Werror")
 
-# Include directories (equivalent to -I"../install/include/")
-include_directories("install/include/soem/")
-
-# Link directories (equivalent to -L"../install/lib/")
-link_directories("install/lib/")
-
-# Specify the source file
-set(SOURCES freddy_power_control/pmu_control.c)
-
-# Specify the executable to be built from the source file
-add_executable(pmu_control ${SOURCES})
-
-# Link libraries (equivalent to -lsoem -lpthread -lgsl -ldl -lgslcblas -lm)
-target_link_libraries(pmu_control
+add_executable(eddie_pmu_control
+    eddie_pmu_control.c
+)
+target_link_libraries(eddie_pmu_control
     soem
+)
+
+set_target_properties(eddie_pmu_control PROPERTIES
+    BUILD_WITH_INSTALL_RPATH TRUE
+    INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib"
+    INSTALL_RPATH_USE_LINK_PATH TRUE
+)
+
+install(TARGETS eddie_pmu_control
+    RUNTIME DESTINATION bin
 )

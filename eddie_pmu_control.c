@@ -1,6 +1,6 @@
-
 #include <inttypes.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "ethercat.h"
@@ -15,8 +15,7 @@
 
 char IOmap[4096];
 
-typedef struct PACKED
-{
+typedef struct PACKED {
   uint16_t status;
   uint64_t time_stamp;
   float current;
@@ -26,14 +25,77 @@ typedef struct PACKED
   uint32_t param2;
 } txpdo1_t;
 
-typedef struct PACKED
-{
+typedef struct PACKED {
   uint16_t shutdown;
   uint32_t command;
 } rxpdo1_t;
 
-int main(int argc, char *argv[])
-{
+#define BASE_AND_TORSO_OFF 0b00000100         // base off; torso off; // 4
+#define BASE_ON_TORSO_OFF 0b00000111          // base on; torso off; // 7
+#define BASE_DEFAULT_ON_TORSO_ON 0b00100000   // base on (default); torso on; // 32
+#define BASE_OFF_TORSO_ON 0b00100100          // base off; torso on; // 36
+#define BASE_AND_TORSO_ON 0b00100111          // base on; torso on; // 39
+#define DO_NOT_SHUTDOWN_PMU 0b00000000        // donot shutdown pmu; // 0
+#define SHUTDOWN_PMU_WITH_DELAY 0b01000001    // shutdown pmu with 2 seconds delay; // 65
+
+uint32_t int_to_command(int input) {
+  uint32_t command = 0;
+  switch (input) {
+    case 0:
+      command = BASE_AND_TORSO_OFF;
+      break;
+    case 1:
+      command = BASE_ON_TORSO_OFF;
+      break;
+    case 2:
+      command = BASE_DEFAULT_ON_TORSO_ON;
+      break;
+    case 3:
+      command = BASE_OFF_TORSO_ON;
+      break;
+    case 4:
+      command = BASE_AND_TORSO_ON;
+      break;
+    case 5:
+      command = DO_NOT_SHUTDOWN_PMU;
+      break;
+    case 6:
+      command = SHUTDOWN_PMU_WITH_DELAY;
+      break;
+    default:
+      printf("Invalid input: %d\n", input);
+      break;
+  }
+  return command;
+}
+
+int main(int argc, char *argv[]) {
+  char *ifname = NULL;
+  int command = 0;
+
+  // two arguments: interface name and command
+  if (argc > 2) {
+    ifname = argv[1];
+    command = atoi(argv[2]);
+  } else {
+    printf("Usage: %s <iface> <command>\n", argv[0]);
+    printf("Example: %s enp2s0 2\n", argv[0]);
+    printf("Commands:\n");
+    printf("  0: Base and torso off\n");
+    printf("  1: Base on, torso off\n");
+    printf("  2: Base on (default), torso on\n");
+    printf("  3: Base off, torso on\n");
+    printf("  4: Base on, torso on\n");
+    printf("  5: Do not shutdown PMU\n");
+    printf("  6: Shutdown PMU with delay\n");
+    return 1;
+  }
+  if (command < 0 || command > 6) {
+    printf("Invalid command: %d\n", command);
+    return 1;
+  }
+
+  uint32_t command_value = int_to_command(command);
 
   ec_slavet ecx_slave[EC_MAXSLAVE];
   int ecx_slavecount;
@@ -73,30 +135,26 @@ int main(int argc, char *argv[])
   ecx_context.PDOdesc = &ec_PDOdesc;
   ecx_context.eepSM = &ec_SM;
   ecx_context.eepFMMU = &ec_FMMU;
-  ecx_context.manualstatechange = 0; // should be 0
+  ecx_context.manualstatechange = 0;  // should be 0
 
-  if (!ecx_init(&ecx_context, "enp2s0"))
-  {
+  if (!ecx_init(&ecx_context, ifname)) {
     printf("Failed to initialize EtherCAT\n");
     return 0;
   }
 
-  if (!ecx_config_init(&ecx_context, TRUE))
-  {
+  if (!ecx_config_init(&ecx_context, TRUE)) {
     printf("NO SLAVES!\n");
     return 0;
   }
-  ecx_config_map_group(&ecx_context, IOmap, 0); // PDO - process data object
+  ecx_config_map_group(&ecx_context, IOmap, 0);  // PDO - process data object
 
   printf("slave count: %i\n", ecx_slavecount);
-  printf("first slave name: %s\n", ecx_slave[1].name);
 
   /**
    * @brief Reading all slave names w.r.t their no.
    *
    */
-  for (int i = 1; i <= ecx_slavecount; i++)
-  {
+  for (int i = 1; i <= ecx_slavecount; i++) {
     printf("slave [%i] has name [%s]\n", i, ecx_slave[i].name);
   }
 
@@ -106,7 +164,8 @@ int main(int argc, char *argv[])
    */
   ecx_statecheck(&ecx_context, 0, EC_STATE_SAFE_OP, EC_TIMEOUTSTATE);
 
-  if (ecx_slave[0].state != EC_STATE_SAFE_OP) // with index 0, we are checking the state of all slaves
+  if (ecx_slave[0].state != EC_STATE_SAFE_OP)  // with index 0, we are checking
+                                               // the state of all slaves
   {
     printf("EtherCAT slaves have not reached safe operational state\n");
     ecx_readstate(&ecx_context);
@@ -115,10 +174,8 @@ int main(int argc, char *argv[])
      * @brief if not all slaves operational, find out which one
      *
      */
-    for (int i = 1; i <= ecx_slavecount; i++)
-    {
-      if (ecx_slave[i].state != EC_STATE_SAFE_OP)
-      {
+    for (int i = 1; i <= ecx_slavecount; i++) {
+      if (ecx_slave[i].state != EC_STATE_SAFE_OP) {
         printf("Slave %i State= %i\n", i, ecx_slave[i].state);
       }
     }
@@ -147,20 +204,11 @@ int main(int argc, char *argv[])
   printf("time_stamp: %ld\n", a->time_stamp);
 
   rxpdo1_t msg;
-  // msg.command = 0b00100100; // base off; torso on; // 36
-  // msg.command = 0b00000100; // base off; torso off; // 4
-  // msg.command = 0b00100111; // base on; torso on; // 39
-  msg.command = 0b00100000; // base on (default); torso on; // 32
-  // msg.command = 0b00000111; // base on; torso off; // 7
-
-  // msg.shutdown = 0b01000001; // shutdown pmu with 2 seconds delay; // 65
-  // msg.shutdown = 0b00000000; // donot shutdown pmu; // 0
+  msg.command = command_value;
+  msg.shutdown = 0;
 
   rxpdo1_t *ecData = (rxpdo1_t *)ecx_slave[1].outputs;
   *ecData = msg;
-
-  printf("setting 'command': %d\n", ecData->command);
-  printf("setting 'shutdown': %d\n", ecData->shutdown);
 
   ecx_send_processdata(&ecx_context);
 
